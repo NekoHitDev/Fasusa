@@ -48,10 +48,19 @@ The program will ask a N3 node for all Nep17 transfers in the last 30 minutes, t
 find all GAS related transfer, find all user triggered transfer, and try to insert them
 into DynamoDB. Each transfer will be identified by <txHash, notifyIndex>, and each
 pair can and only can be insert once. All transfer that successfully inserted are keep
-processing: calculating CAT amount and make the transfer. All failed one means there
-is already a same record in the database, it is either being processed by other instances,
-or has been processed in the past. The program will attach paid tx hash and current
-GAS/USD price after everything is settled.
+processing: ***remove 0.05GAS exchange fee***, calculating CAT amount, make the 
+transfer and set the callback. The callback will check the tx result to make sure:
+
++ NeoVM is HALT
++ transfer method returns `true`
+
+This will make sure the CAT tokens are being correctly transferred. For those failed
+to insert to DynamoDB, that means there are already same records in the database,
+they are either being processed by other instances, or have been processed in the past.
+The program will attach the paid tx hash and current GAS/USD price if and only if
+the transfer is confirmed, otherwise it will leave it empty and prevent future process.
+At this time, the tx can be only processed by admin manually, since the program cannot
+process it correctly.
 
 After all transfers are processed, the program exits.
 
@@ -67,29 +76,29 @@ All I need to ensure is that no one can steal those CAT tokens on the mainnet.
 If your payment is not accepted by this program, it's already on chain, we
 can manually confirm it and process it. Just don't panic.
 
-Here's some potential scenarios that this program will refuse to work:
+If some important data cannot be fetched, the program will exit and no transfers
+are being processed, future instances can retry to process.
 
-+ Env settings are not correct: Exits before process any transfer.
-+ Cannot fetch price data from Binance: Exits before process any transfer.
-+ Not enough CAT token: It may or may not be detected
-  + If it's detected, the program will stop processing any transfer.
-    The `gas_price` and `paid_tx` will be empty. You have to query the tx info
-    to get the block time and process the transfer.
-  + If it's not, the program will keep sending tx, but no valid transfer.
-    The `gas_price` and `paid_tx` will be filled, but `paid_tx` has no transfer.
-+ Run out of gas: An exception will be thrown and no transfer will be processed.
+If something happened during processing each transfer, the transfer has been
+inserted to DynamoDB, thus, future instances won't retry again. Those transfer
+will be there until users notice they don't receive tokens and ask admins.
 
-If we run out of something: try to recover it and let the program try again.
-It will scan every 5min for all transfer occurred in last 30min. Only manually
-process a transfer if:
+If a transfer is not processed successfully, please check the DynamoDB first.
+***Note: DynamoDB is not consistent when read normally, give it some time.***
+
+Only manually process a transfer if:
 
 + It's in the DynamoDB, but no `paid_tx` and `gas_price`, and the instance is dead.
   This can be confirmed by checking the block time and see the CloudWatch logs.
 + Or, the transfer is not in DynamoDB, but it has been already 30 minutes passed.
   The program will not try to process it in the future.
 
-At this time, you can manually process the transfer, and insert a correct record
-into the DynamoDB.
+Once you confirm the transfer is accepted but not processed by program, manually
+start the container with `PROCESS_TX_ONESHOT` set to the transfer txId. The program
+will only process that tx and exit.
+***Note: This will retry all transfer events in that tx, if some of them are paid,
+you have to manually process the rest.***
+
 
 ## Potential flaws
 
@@ -115,6 +124,12 @@ The default value is `false`. When set to `true`:
 + AWS region is set to EU_CENTRAL_1
 
 This is only for testing run.
+
+### `PROCESS_TX_ONESHOT`
+
+This will make program only process the giving tx and then exit.
+
+Used when some tx are not process. ***DO NOT USE WHEN TX IS PARTIALLY PROCESSED!***
 
 ### `NODE_URL`
 

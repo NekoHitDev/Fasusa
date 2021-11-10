@@ -13,6 +13,8 @@ public class Env {
     public static final boolean DEBUG_MODE =
             Boolean.parseBoolean(readFromEnv("DEBUG_MODE", "false"));
 
+    public static final String PROCESS_TX_ONESHOT = readFromEnv("PROCESS_TX_ONESHOT", "");
+
     public static final String NODE_URL = readFromEnv("NODE_URL");
     public static final long SCAN_DURATION_MIN = Long.parseLong(readFromEnv("SCAN_DURATION_MIN", "30"));
     public static final String DYNAMODB_TABLE_NAME = readFromEnv("DYNAMODB_TABLE_NAME");
